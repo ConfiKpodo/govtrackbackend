@@ -1,0 +1,581 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model agencies {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ministry_id String     @db.Uuid
+  name        String     @db.VarChar(200)
+  code        String?    @unique @db.VarChar(50)
+  description String?
+  is_active   Boolean    @default(true)
+  created_at  DateTime   @default(now()) @db.Timestamptz(6)
+  ministries  ministries @relation(fields: [ministry_id], references: [id], map: "fk_agency_ministry")
+  projects    projects[]
+  users       users[]
+
+  @@unique([ministry_id, name])
+}
+
+model audit_logs {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String?  @db.Uuid
+  action      String   @db.VarChar(100)
+  entity_type String   @db.VarChar(100)
+  entity_id   String?  @db.Uuid
+  old_values  Json?
+  new_values  Json?
+  ip_address  String?  @db.Inet
+  user_agent  String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  users       users?   @relation(fields: [user_id], references: [id], onUpdate: NoAction, map: "fk_audit_user")
+
+  @@index([action], map: "idx_audit_action")
+  @@index([created_at], map: "idx_audit_created_at")
+  @@index([entity_type, entity_id], map: "idx_audit_entity")
+  @@index([user_id], map: "idx_audit_user")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model citizen_feedback {
+  id                                         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                                 String    @db.Uuid
+  submitted_by                               String?   @db.Uuid
+  citizen_name                               String?   @db.VarChar(150)
+  citizen_email                              String?   @db.VarChar(255)
+  subject                                    String    @db.VarChar(255)
+  message                                    String
+  feedback_category                          String    @default("GENERAL") @db.VarChar(40)
+  is_anonymous                               Boolean   @default(false)
+  status                                     String    @default("NEW") @db.VarChar(30)
+  reviewed_by                                String?   @db.Uuid
+  reviewed_at                                DateTime? @db.Timestamptz(6)
+  response                                   String?
+  created_at                                 DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                                 DateTime  @default(now()) @db.Timestamptz(6)
+  projects                                   projects  @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_feedback_project")
+  users_citizen_feedback_reviewed_byTousers  users?    @relation("citizen_feedback_reviewed_byTousers", fields: [reviewed_by], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_feedback_reviewer")
+  users_citizen_feedback_submitted_byTousers users?    @relation("citizen_feedback_submitted_byTousers", fields: [submitted_by], references: [id], onUpdate: NoAction, map: "fk_feedback_user")
+
+  @@index([created_at], map: "idx_feedback_created_at")
+  @@index([project_id], map: "idx_feedback_project")
+  @@index([reviewed_by], map: "idx_feedback_reviewer")
+  @@index([status], map: "idx_feedback_status")
+}
+
+model contractors {
+  id                  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_name        String      @db.VarChar(200)
+  registration_number String?     @unique @db.VarChar(100)
+  contact_email       String?     @db.VarChar(200)
+  contact_phone       String?     @db.VarChar(30)
+  address             String?
+  created_at          DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime    @default(now()) @db.Timestamptz(6)
+  contracts           contracts[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model contracts {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id      String      @db.Uuid
+  contractor_id   String      @db.Uuid
+  contract_number String      @unique @db.VarChar(100)
+  contract_title  String      @db.VarChar(255)
+  description     String?
+  contract_amount Decimal     @db.Decimal(18, 2)
+  currency        String      @default("GHS") @db.VarChar(3)
+  award_date      DateTime?   @db.Date
+  start_date      DateTime?   @db.Date
+  end_date        DateTime?   @db.Date
+  status          String      @default("AWARDED") @db.VarChar(30)
+  created_at      DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime    @default(now()) @db.Timestamptz(6)
+  contractors     contractors @relation(fields: [contractor_id], references: [id], onUpdate: NoAction)
+  projects        projects    @relation(fields: [project_id], references: [id], onUpdate: NoAction)
+
+  @@index([contractor_id], map: "idx_contracts_contractor")
+  @@index([project_id], map: "idx_contracts_project")
+}
+
+model districts {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  region_id  String     @db.Uuid
+  name       String     @db.VarChar(150)
+  code       String?    @unique @db.VarChar(30)
+  created_at DateTime   @default(now()) @db.Timestamptz(6)
+  regions    regions    @relation(fields: [region_id], references: [id], map: "fk_district_region")
+  projects   projects[]
+
+  @@unique([region_id, name])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model expenditures {
+  id                                    String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                            String          @db.Uuid
+  budget_id                             String          @db.Uuid
+  amount                                Decimal         @db.Decimal(18, 2)
+  currency                              String          @default("GHS") @db.VarChar(3)
+  expenditure_date                      DateTime        @db.Date
+  description                           String
+  payment_reference                     String?         @unique @db.VarChar(150)
+  payment_status                        String          @default("PENDING_APPROVAL") @db.VarChar(30)
+  recorded_by                           String          @db.Uuid
+  approved_by                           String?         @db.Uuid
+  approved_at                           DateTime?       @db.Timestamptz(6)
+  created_at                            DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at                            DateTime        @default(now()) @db.Timestamptz(6)
+  users_expenditures_approved_byTousers users?          @relation("expenditures_approved_byTousers", fields: [approved_by], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_expenditure_approver")
+  project_budgets                       project_budgets @relation(fields: [budget_id, project_id, currency], references: [id, project_id, currency], onUpdate: NoAction, map: "fk_expenditure_budget_project_currency")
+  projects                              projects        @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_expenditure_project")
+  users_expenditures_recorded_byTousers users           @relation("expenditures_recorded_byTousers", fields: [recorded_by], references: [id], onUpdate: NoAction, map: "fk_expenditure_recorder")
+
+  @@index([budget_id], map: "idx_expenditures_budget")
+  @@index([expenditure_date], map: "idx_expenditures_date")
+  @@index([project_id], map: "idx_expenditures_project")
+  @@index([payment_status], map: "idx_expenditures_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model fund_releases {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id        String           @db.Uuid
+  budget_id         String           @db.Uuid
+  funding_source_id String?          @db.Uuid
+  amount            Decimal          @db.Decimal(18, 2)
+  currency          String           @default("GHS") @db.VarChar(3)
+  release_date      DateTime         @db.Date
+  reference_number  String?          @unique @db.VarChar(150)
+  description       String?
+  recorded_by       String           @db.Uuid
+  created_at        DateTime         @default(now()) @db.Timestamptz(6)
+  project_budgets   project_budgets  @relation(fields: [budget_id, project_id, currency], references: [id, project_id, currency], onUpdate: NoAction, map: "fk_release_budget_project_currency")
+  funding_sources   funding_sources? @relation(fields: [funding_source_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_release_funding_source")
+  projects          projects         @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_release_project")
+  users             users            @relation(fields: [recorded_by], references: [id], onUpdate: NoAction, map: "fk_release_recorder")
+
+  @@index([budget_id], map: "idx_fund_releases_budget")
+  @@index([release_date], map: "idx_fund_releases_date")
+  @@index([project_id], map: "idx_fund_releases_project")
+  @@index([funding_source_id], map: "idx_fund_releases_source")
+}
+
+model funding_sources {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String          @unique @db.VarChar(200)
+  description   String?
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
+  fund_releases fund_releases[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model inspections {
+  id                                    String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                            String          @db.Uuid
+  inspector_id                          String          @db.Uuid
+  inspection_date                       DateTime        @default(now()) @db.Timestamptz(6)
+  latitude                              Decimal?        @db.Decimal(10, 7)
+  longitude                             Decimal?        @db.Decimal(10, 7)
+  inspection_type                       String          @default("ROUTINE") @db.VarChar(50)
+  findings                              String
+  quality_assessment                    String?
+  recommendations                       String?
+  verification_status                   String          @default("PENDING") @db.VarChar(30)
+  reviewed_by                           String?         @db.Uuid
+  reviewed_at                           DateTime?       @db.Timestamptz(6)
+  review_remarks                        String?
+  created_at                            DateTime        @default(now()) @db.Timestamptz(6)
+  users_inspections_inspector_idTousers users           @relation("inspections_inspector_idTousers", fields: [inspector_id], references: [id], onUpdate: NoAction, map: "fk_inspection_inspector")
+  projects                              projects        @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_inspection_project")
+  users_inspections_reviewed_byTousers  users?          @relation("inspections_reviewed_byTousers", fields: [reviewed_by], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_inspection_reviewer")
+  project_media                         project_media[]
+
+  @@unique([id, project_id], map: "uq_inspection_id_project")
+  @@index([inspection_date], map: "idx_inspections_date")
+  @@index([inspector_id], map: "idx_inspections_inspector")
+  @@index([project_id], map: "idx_inspections_project")
+  @@index([verification_status], map: "idx_inspections_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model milestone_updates {
+  id                                          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  milestone_id                                String     @db.Uuid
+  progress_percentage                         Decimal    @db.Decimal(5, 2)
+  remarks                                     String?
+  submitted_by                                String     @db.Uuid
+  submitted_at                                DateTime   @default(now()) @db.Timestamptz(6)
+  verification_status                         String     @default("PENDING") @db.VarChar(30)
+  verified_by                                 String?    @db.Uuid
+  verified_at                                 DateTime?  @db.Timestamptz(6)
+  verification_remarks                        String?
+  milestones                                  milestones @relation(fields: [milestone_id], references: [id], onUpdate: NoAction, map: "fk_update_milestone")
+  users_milestone_updates_submitted_byTousers users      @relation("milestone_updates_submitted_byTousers", fields: [submitted_by], references: [id], onUpdate: NoAction, map: "fk_update_submitter")
+  users_milestone_updates_verified_byTousers  users?     @relation("milestone_updates_verified_byTousers", fields: [verified_by], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_update_verifier")
+
+  @@index([milestone_id], map: "idx_milestone_updates_milestone")
+  @@index([submitted_by], map: "idx_milestone_updates_submitter")
+  @@index([verification_status], map: "idx_milestone_updates_verification")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model milestones {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id        String              @db.Uuid
+  title             String              @db.VarChar(255)
+  description       String?
+  weight            Decimal             @default(0) @db.Decimal(5, 2)
+  start_date        DateTime?           @db.Date
+  due_date          DateTime?           @db.Date
+  completed_at      DateTime?           @db.Timestamptz(6)
+  status            String              @default("PENDING") @db.VarChar(30)
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime            @default(now()) @db.Timestamptz(6)
+  milestone_updates milestone_updates[]
+  projects          projects            @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_milestone_project")
+
+  @@index([project_id], map: "idx_milestones_project")
+  @@index([status], map: "idx_milestones_status")
+}
+
+model ministries {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String     @unique @db.VarChar(200)
+  code        String     @unique @db.VarChar(50)
+  description String?
+  is_active   Boolean    @default(true)
+  created_at  DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime   @default(now()) @db.Timestamptz(6)
+  agencies    agencies[]
+  projects    projects[]
+  users       users[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model notifications {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id             String    @db.Uuid
+  title               String    @db.VarChar(255)
+  message             String
+  notification_type   String    @db.VarChar(50)
+  related_entity_type String?   @db.VarChar(50)
+  related_entity_id   String?   @db.Uuid
+  is_read             Boolean   @default(false)
+  read_at             DateTime? @db.Timestamptz(6)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  users               users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_notification_user")
+
+  @@index([user_id, created_at(sort: Desc)], map: "idx_notifications_unread", where: raw("(is_read = false)"))
+  @@index([user_id], map: "idx_notifications_user")
+}
+
+model permissions {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String             @unique @db.VarChar(150)
+  description      String?
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  role_permissions role_permissions[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model progress_reports {
+  id                                         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                                 String    @db.Uuid
+  submitted_by                               String    @db.Uuid
+  report_date                                DateTime  @db.Date
+  reporting_period_start                     DateTime? @db.Date
+  reporting_period_end                       DateTime? @db.Date
+  implementation_stage                       String?   @db.VarChar(150)
+  reported_progress                          Decimal   @db.Decimal(5, 2)
+  activities_completed                       String?
+  activities_pending                         String?
+  challenges                                 String?
+  recommendations                            String?
+  review_status                              String    @default("PENDING_REVIEW") @db.VarChar(30)
+  reviewed_by                                String?   @db.Uuid
+  reviewed_at                                DateTime? @db.Timestamptz(6)
+  review_remarks                             String?
+  created_at                                 DateTime  @default(now()) @db.Timestamptz(6)
+  projects                                   projects  @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_report_project")
+  users_progress_reports_reviewed_byTousers  users?    @relation("progress_reports_reviewed_byTousers", fields: [reviewed_by], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_report_reviewer")
+  users_progress_reports_submitted_byTousers users     @relation("progress_reports_submitted_byTousers", fields: [submitted_by], references: [id], onUpdate: NoAction, map: "fk_report_submitter")
+
+  @@index([report_date], map: "idx_progress_reports_date")
+  @@index([project_id], map: "idx_progress_reports_project")
+  @@index([review_status], map: "idx_progress_reports_review_status")
+  @@index([submitted_by], map: "idx_progress_reports_submitter")
+}
+
+model project_assignments {
+  id                                           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                                   String   @db.Uuid
+  user_id                                      String   @db.Uuid
+  assignment_role                              String   @db.VarChar(100)
+  assigned_by                                  String   @db.Uuid
+  assigned_at                                  DateTime @default(now()) @db.Timestamptz(6)
+  is_active                                    Boolean  @default(true)
+  users_project_assignments_assigned_byTousers users    @relation("project_assignments_assigned_byTousers", fields: [assigned_by], references: [id], onUpdate: NoAction)
+  projects                                     projects @relation(fields: [project_id], references: [id], onUpdate: NoAction)
+  users_project_assignments_user_idTousers     users    @relation("project_assignments_user_idTousers", fields: [user_id], references: [id], onUpdate: NoAction)
+
+  @@unique([project_id, user_id, assignment_role], map: "uq_active_project_assignment", where: raw("(is_active = true)"))
+  @@index([user_id], map: "idx_project_assignments_user")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model project_budgets {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id      String          @db.Uuid
+  fiscal_year     Int
+  approved_amount Decimal         @db.Decimal(18, 2)
+  currency        String          @default("GHS") @db.VarChar(3)
+  description     String?
+  approved_by     String          @db.Uuid
+  approval_date   DateTime        @db.Date
+  created_at      DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime        @default(now()) @db.Timestamptz(6)
+  expenditures    expenditures[]
+  fund_releases   fund_releases[]
+  users           users           @relation(fields: [approved_by], references: [id], onUpdate: NoAction, map: "fk_budget_approver")
+  projects        projects        @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_budget_project")
+
+  @@unique([id, project_id, currency], map: "uq_budget_project_currency")
+  @@unique([project_id, fiscal_year, currency], map: "uq_project_fiscal_year_currency")
+  @@index([project_id], map: "idx_project_budgets_project")
+  @@index([fiscal_year], map: "idx_project_budgets_year")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model project_issues {
+  id                                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                              String    @db.Uuid
+  reported_by                             String    @db.Uuid
+  assigned_to                             String?   @db.Uuid
+  title                                   String    @db.VarChar(255)
+  description                             String
+  issue_category                          String    @db.VarChar(50)
+  severity                                String    @default("MEDIUM") @db.VarChar(20)
+  status                                  String    @default("OPEN") @db.VarChar(30)
+  reported_at                             DateTime  @default(now()) @db.Timestamptz(6)
+  target_resolution_date                  DateTime? @db.Date
+  resolution_notes                        String?
+  resolved_at                             DateTime? @db.Timestamptz(6)
+  resolved_by                             String?   @db.Uuid
+  updated_at                              DateTime  @default(now()) @db.Timestamptz(6)
+  users_project_issues_assigned_toTousers users?    @relation("project_issues_assigned_toTousers", fields: [assigned_to], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_issue_assignee")
+  projects                                projects  @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_issue_project")
+  users_project_issues_reported_byTousers users     @relation("project_issues_reported_byTousers", fields: [reported_by], references: [id], onUpdate: NoAction, map: "fk_issue_reporter")
+  users_project_issues_resolved_byTousers users?    @relation("project_issues_resolved_byTousers", fields: [resolved_by], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_issue_resolver")
+
+  @@index([assigned_to], map: "idx_project_issues_assignee")
+  @@index([project_id], map: "idx_project_issues_project")
+  @@index([severity], map: "idx_project_issues_severity")
+  @@index([status], map: "idx_project_issues_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model project_media {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id         String       @db.Uuid
+  inspection_id      String?      @db.Uuid
+  uploaded_by        String       @db.Uuid
+  original_file_name String       @db.VarChar(255)
+  storage_key        String       @unique
+  storage_provider   String       @default("S3") @db.VarChar(50)
+  mime_type          String       @db.VarChar(150)
+  file_type          String       @db.VarChar(30)
+  file_size_bytes    BigInt
+  media_category     String       @default("OTHER") @db.VarChar(30)
+  caption            String?
+  captured_at        DateTime?    @db.Timestamptz(6)
+  latitude           Decimal?     @db.Decimal(10, 7)
+  longitude          Decimal?     @db.Decimal(10, 7)
+  visibility         String       @default("INTERNAL") @db.VarChar(20)
+  created_at         DateTime     @default(now()) @db.Timestamptz(6)
+  inspections        inspections? @relation(fields: [inspection_id, project_id], references: [id, project_id], onUpdate: NoAction, map: "fk_media_inspection_project")
+  projects           projects     @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_media_project")
+  users              users        @relation(fields: [uploaded_by], references: [id], onUpdate: NoAction, map: "fk_media_uploader")
+
+  @@index([media_category], map: "idx_project_media_category")
+  @@index([inspection_id], map: "idx_project_media_inspection")
+  @@index([project_id], map: "idx_project_media_project")
+  @@index([uploaded_by], map: "idx_project_media_uploader")
+  @@index([visibility], map: "idx_project_media_visibility")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model projects {
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_code         String                @unique @db.VarChar(50)
+  title                String                @db.VarChar(255)
+  description          String?
+  objectives           String?
+  sector               String                @db.VarChar(100)
+  ministry_id          String                @db.Uuid
+  agency_id            String?               @db.Uuid
+  region_id            String                @db.Uuid
+  district_id          String?               @db.Uuid
+  location_description String?
+  latitude             Decimal?              @db.Decimal(10, 7)
+  longitude            Decimal?              @db.Decimal(10, 7)
+  origin_type          String                @default("NEW") @db.VarChar(30)
+  status               String                @default("PROPOSED") @db.VarChar(30)
+  start_date           DateTime?             @db.Date
+  expected_end_date    DateTime?             @db.Date
+  actual_end_date      DateTime?             @db.Date
+  created_by           String                @db.Uuid
+  created_at           DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime              @default(now()) @db.Timestamptz(6)
+  citizen_feedback     citizen_feedback[]
+  contracts            contracts[]
+  expenditures         expenditures[]
+  fund_releases        fund_releases[]
+  inspections          inspections[]
+  milestones           milestones[]
+  progress_reports     progress_reports[]
+  project_assignments  project_assignments[]
+  project_budgets      project_budgets[]
+  project_issues       project_issues[]
+  project_media        project_media[]
+  agencies             agencies?             @relation(fields: [agency_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_project_agency")
+  users                users                 @relation(fields: [created_by], references: [id], onUpdate: NoAction, map: "fk_project_creator")
+  districts            districts?            @relation(fields: [district_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_project_district")
+  ministries           ministries            @relation(fields: [ministry_id], references: [id], onUpdate: NoAction, map: "fk_project_ministry")
+  regions              regions               @relation(fields: [region_id], references: [id], onUpdate: NoAction, map: "fk_project_region")
+  publications         publications?
+
+  @@index([agency_id], map: "idx_projects_agency")
+  @@index([created_by], map: "idx_projects_created_by")
+  @@index([district_id], map: "idx_projects_district")
+  @@index([ministry_id], map: "idx_projects_ministry")
+  @@index([region_id], map: "idx_projects_region")
+  @@index([sector], map: "idx_projects_sector")
+  @@index([status], map: "idx_projects_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model publication_reviews {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  publication_id String       @db.Uuid
+  reviewer_id    String       @db.Uuid
+  decision       String       @db.VarChar(30)
+  comments       String?
+  reviewed_at    DateTime     @default(now()) @db.Timestamptz(6)
+  publications   publications @relation(fields: [publication_id], references: [id], onUpdate: NoAction, map: "fk_review_publication")
+  users          users        @relation(fields: [reviewer_id], references: [id], onUpdate: NoAction, map: "fk_review_reviewer")
+
+  @@index([publication_id], map: "idx_publication_reviews_publication")
+  @@index([reviewer_id], map: "idx_publication_reviews_reviewer")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model publications {
+  id                                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                             String                @unique @db.Uuid
+  title                                  String                @db.VarChar(255)
+  public_summary                         String?
+  public_description                     String?
+  publication_status                     String                @default("DRAFT") @db.VarChar(30)
+  submitted_by                           String                @db.Uuid
+  submitted_at                           DateTime?             @db.Timestamptz(6)
+  approved_by                            String?               @db.Uuid
+  approved_at                            DateTime?             @db.Timestamptz(6)
+  published_at                           DateTime?             @db.Timestamptz(6)
+  unpublished_at                         DateTime?             @db.Timestamptz(6)
+  rejection_reason                       String?
+  created_at                             DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at                             DateTime              @default(now()) @db.Timestamptz(6)
+  publication_reviews                    publication_reviews[]
+  users_publications_approved_byTousers  users?                @relation("publications_approved_byTousers", fields: [approved_by], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_publication_approver")
+  projects                               projects              @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_publication_project")
+  users_publications_submitted_byTousers users                 @relation("publications_submitted_byTousers", fields: [submitted_by], references: [id], onUpdate: NoAction, map: "fk_publication_submitter")
+
+  @@index([published_at], map: "idx_publications_published_at")
+  @@index([publication_status], map: "idx_publications_status")
+}
+
+model regions {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String      @unique @db.VarChar(150)
+  code       String      @unique @db.VarChar(20)
+  created_at DateTime    @default(now()) @db.Timestamptz(6)
+  districts  districts[]
+  projects   projects[]
+}
+
+model role_permissions {
+  role_id       String      @db.Uuid
+  permission_id String      @db.Uuid
+  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([role_id, permission_id])
+}
+
+model roles {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String             @unique @db.VarChar(100)
+  description      String?
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  role_permissions role_permissions[]
+  user_roles       user_roles[]
+}
+
+model user_roles {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String   @db.Uuid
+  role_id     String   @db.Uuid
+  assigned_at DateTime @default(now()) @db.Timestamptz(6)
+  roles       roles    @relation(fields: [role_id], references: [id], onUpdate: NoAction)
+  users       users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, role_id])
+}
+
+model users {
+  id                                                         String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  first_name                                                 String                @db.VarChar(100)
+  last_name                                                  String                @db.VarChar(100)
+  email                                                      String                @unique @db.VarChar(200)
+  password_hash                                              String
+  phone                                                      String?               @db.VarChar(30)
+  ministry_id                                                String?               @db.Uuid
+  agency_id                                                  String?               @db.Uuid
+  is_active                                                  Boolean               @default(true)
+  created_at                                                 DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at                                                 DateTime              @default(now()) @db.Timestamptz(6)
+  audit_logs                                                 audit_logs[]
+  citizen_feedback_citizen_feedback_reviewed_byTousers       citizen_feedback[]    @relation("citizen_feedback_reviewed_byTousers")
+  citizen_feedback_citizen_feedback_submitted_byTousers      citizen_feedback[]    @relation("citizen_feedback_submitted_byTousers")
+  expenditures_expenditures_approved_byTousers               expenditures[]        @relation("expenditures_approved_byTousers")
+  expenditures_expenditures_recorded_byTousers               expenditures[]        @relation("expenditures_recorded_byTousers")
+  fund_releases                                              fund_releases[]
+  inspections_inspections_inspector_idTousers                inspections[]         @relation("inspections_inspector_idTousers")
+  inspections_inspections_reviewed_byTousers                 inspections[]         @relation("inspections_reviewed_byTousers")
+  milestone_updates_milestone_updates_submitted_byTousers    milestone_updates[]   @relation("milestone_updates_submitted_byTousers")
+  milestone_updates_milestone_updates_verified_byTousers     milestone_updates[]   @relation("milestone_updates_verified_byTousers")
+  notifications                                              notifications[]
+  progress_reports_progress_reports_reviewed_byTousers       progress_reports[]    @relation("progress_reports_reviewed_byTousers")
+  progress_reports_progress_reports_submitted_byTousers      progress_reports[]    @relation("progress_reports_submitted_byTousers")
+  project_assignments_project_assignments_assigned_byTousers project_assignments[] @relation("project_assignments_assigned_byTousers")
+  project_assignments_project_assignments_user_idTousers     project_assignments[] @relation("project_assignments_user_idTousers")
+  project_budgets                                            project_budgets[]
+  project_issues_project_issues_assigned_toTousers           project_issues[]      @relation("project_issues_assigned_toTousers")
+  project_issues_project_issues_reported_byTousers           project_issues[]      @relation("project_issues_reported_byTousers")
+  project_issues_project_issues_resolved_byTousers           project_issues[]      @relation("project_issues_resolved_byTousers")
+  project_media                                              project_media[]
+  projects                                                   projects[]
+  publication_reviews                                        publication_reviews[]
+  publications_publications_approved_byTousers               publications[]        @relation("publications_approved_byTousers")
+  publications_publications_submitted_byTousers              publications[]        @relation("publications_submitted_byTousers")
+  user_roles                                                 user_roles[]
+  agencies                                                   agencies?             @relation(fields: [agency_id], references: [id], map: "fk_user_agency")
+  ministries                                                 ministries?           @relation(fields: [ministry_id], references: [id], map: "fk_user_ministry")
+}
